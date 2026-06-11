@@ -22,22 +22,30 @@ export class TeamAI {
   }
 
   createPlayer(index, baseZ) {
-    const bodyGeometry = new THREE.CapsuleGeometry(3.2, 4.5, 6, 12);
+    const playerGroup = new THREE.Group();
     const bodyMaterial = new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.45, metalness: 0.05 });
-    const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(1.6, 16, 16), new THREE.MeshStandardMaterial({ color: '#ffe7ce', roughness: 0.3 }));
-    head.position.y = 5.2;
-    bodyMesh.add(head);
-    bodyMesh.castShadow = true;
-    bodyMesh.position.set(-32 + index * 16 + (this.isHome ? -12 : 12), 4, baseZ + (index % 2 === 0 ? -8 : 8));
-    this.scene.add(bodyMesh);
+    const bodyMesh = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 7.4, 14), bodyMaterial);
+    bodyMesh.position.y = 0;
+    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(1.6, 16, 16), new THREE.MeshStandardMaterial({ color: '#ffe7ce', roughness: 0.3 }));
+    headMesh.position.y = 4.8;
+    const shoulder = new THREE.Mesh(new THREE.TorusGeometry(3.6, 0.7, 8, 24), bodyMaterial);
+    shoulder.rotation.x = Math.PI / 2;
+    shoulder.position.y = 1.4;
+    playerGroup.add(bodyMesh, headMesh, shoulder);
+    playerGroup.castShadow = true;
+    playerGroup.receiveShadow = true;
+    const startX = -32 + index * 16 + (this.isHome ? -12 : 12);
+    const startZ = baseZ + (index % 2 === 0 ? -8 : 8);
+    const startPosition = new THREE.Vector3(startX, 4.2, startZ);
+    playerGroup.position.copy(startPosition);
+    this.scene.add(playerGroup);
 
-    const body = this.physics.addPlayer(bodyMesh, bodyMesh.position);
-    return new PlayerAI({ mesh: bodyMesh, body, team: this, role: index, isHome: this.isHome });
+    const body = this.physics.addPlayer(playerGroup, startPosition.clone());
+    return new PlayerAI({ mesh: playerGroup, body, team: this, role: index, isHome: this.isHome });
   }
 
-  update(delta, ball, activePlayer) {
-    this.players.forEach((player) => player.update(delta, ball, activePlayer));
+  update(delta, ball, activePlayer, input) {
+    this.players.forEach((player) => player.update(delta, ball, activePlayer, input));
   }
 }
 
@@ -48,11 +56,9 @@ class PlayerAI {
     this.team = team;
     this.role = role;
     this.isHome = isHome;
-    this.speed = 18;
+    this.speed = 22;
     this.position = mesh.position.clone();
     this.target = mesh.position.clone();
-    this.defenseRadius = this.isHome ? -55 : 55;
-    this.hasBall = false;
     this.shootCooldown = 0;
   }
 
@@ -65,41 +71,59 @@ class PlayerAI {
     this.shootCooldown = 0;
   }
 
-  update(delta, ball, activePlayer) {
+  update(delta, ball, activePlayer, input) {
     this.shootCooldown = Math.max(0, this.shootCooldown - delta);
     const ballDistance = this.mesh.position.distanceTo(ball.position);
     const goalPoint = new THREE.Vector3(0, 0, this.team.goalZ + (this.isHome ? -7 : 7));
-    const homeOffset = this.isHome ? 1 : -1;
+    const isControlled = activePlayer === this;
+    const controlTarget = new THREE.Vector3();
+
+    if (isControlled && input) {
+      const direction = new THREE.Vector3();
+      if (input.forward) direction.z -= 1;
+      if (input.backward) direction.z += 1;
+      if (input.left) direction.x -= 1;
+      if (input.right) direction.x += 1;
+      if (direction.lengthSq() > 0) {
+        direction.normalize();
+        this.body.velocity.set(direction.x * this.speed, 0, direction.z * this.speed);
+      } else {
+        this.body.velocity.scale(0.5, this.body.velocity);
+      }
+      if (input.shoot && ballDistance < 8) {
+        this.tryKick(ball, goalPoint, 16);
+      }
+      return;
+    }
 
     if (ballDistance < 16) {
       this.target.copy(ball.position).add(randomOffset());
       if (ballDistance < 6) {
-        this.tryKick(ball, goalPoint);
+        this.tryKick(ball, goalPoint, 12);
       }
-    } else if (Math.abs(this.mesh.position.z) < 45) {
-      const defenseLine = new THREE.Vector3(this.mesh.position.x * 0.75, 0, this.team.goalZ + homeOffset * 20);
-      this.target.copy(defenseLine).add(randomOffset());
     } else {
-      const attackLine = new THREE.Vector3(this.mesh.position.x * 0.8, 0, this.team.goalZ + homeOffset * -10);
-      this.target.copy(attackLine).add(randomOffset());
+      const preferredZ = this.isHome ? -32 : 32;
+      controlTarget.set(this.position.x, 0, preferredZ).add(randomOffset());
+      if (Math.abs(ball.position.z - this.team.goalZ) < 30) {
+        controlTarget.set(ball.position.x * 0.8, 0, ball.position.z + (this.isHome ? 16 : -16));
+      }
+      this.target.copy(controlTarget);
     }
 
     const move = this.target.clone().sub(this.mesh.position);
-    if (move.length() > 0.6) {
+    if (move.length() > 0.8) {
       move.normalize();
-      const speed = this.speed * (this.body.velocity.length() > 0.1 ? 1 : 1.3);
-      this.body.velocity.set(move.x * speed, 0, move.z * speed);
+      this.body.velocity.set(move.x * this.speed, 0, move.z * this.speed);
     } else {
-      this.body.velocity.scale(0.4, this.body.velocity);
+      this.body.velocity.scale(0.35, this.body.velocity);
     }
   }
 
-  tryKick(ball, goalPoint) {
+  tryKick(ball, goalPoint, strength) {
     if (this.shootCooldown > 0) return;
     const direction = goalPoint.clone().sub(ball.position).normalize();
-    const force = 12 + Math.random() * 8;
-    ball.body.velocity.copy(direction.multiplyScalar(force));
-    this.shootCooldown = 1.4;
+    ball.body.velocity.copy(direction.multiplyScalar(strength));
+    this.shootCooldown = 1.2;
   }
 
   sync() {

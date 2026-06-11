@@ -193,11 +193,13 @@ export class Game {
   buildBall() {
     const ballGeometry = new THREE.SphereGeometry(3.5, 24, 24);
     const ballMaterial = new THREE.MeshStandardMaterial({ color: '#f6f6f6', roughness: 0.25, metalness: 0.05 });
-    this.ball = new THREE.Mesh(ballGeometry, ballMaterial);
-    this.ball.castShadow = true;
-    this.ball.position.set(0, 3.5, 0);
-    this.scene.add(this.ball);
-    this.physics.addBall(this.ball);
+    const ballMesh = new THREE.Mesh(ballGeometry, ballMaterial);
+    ballMesh.castShadow = true;
+    ballMesh.position.set(0, 3.5, 0);
+    this.scene.add(ballMesh);
+    this.physics.addBall(ballMesh);
+    this.ball = ballMesh;
+    this.ball.body = this.physics.ball.body;
   }
 
   buildPlayers() {
