@@ -11,15 +11,18 @@ export class Game {
     this.height = window.innerHeight;
     this.clock = new THREE.Clock();
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2('#0b172b', 0.014);
+    this.scene.background = new THREE.Color('#0b1327');
+    this.scene.fog = new THREE.FogExp2('#0b1327', 0.008);
 
     this.camera = new THREE.PerspectiveCamera(55, this.width / this.height, 0.1, 2200);
-    this.camera.position.set(0, 80, 220);
+    this.camera.position.set(0, 100, 180);
+    this.camera.lookAt(0, 10, 0);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     this.renderer.setSize(this.width, this.height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
+    this.renderer.setClearColor('#0b1327', 1);
     this.target.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -52,17 +55,17 @@ export class Game {
   }
 
   buildEnvironment() {
-    const ambient = new THREE.AmbientLight('#ffffff', 0.4);
-    const directional = new THREE.DirectionalLight('#f8f0dc', 1.0);
-    directional.position.set(160, 200, 120);
+    const ambient = new THREE.HemisphereLight('#a6cfff', '#0a1320', 0.55);
+    const directional = new THREE.DirectionalLight('#f8f0dc', 1.3);
+    directional.position.set(120, 250, 140);
     directional.castShadow = true;
     directional.shadow.mapSize.set(2048, 2048);
     directional.shadow.camera.near = 10;
-    directional.shadow.camera.far = 600;
+    directional.shadow.camera.far = 700;
     directional.shadow.camera.left = -260;
     directional.shadow.camera.right = 260;
-    directional.shadow.camera.top = 220;
-    directional.shadow.camera.bottom = -220;
+    directional.shadow.camera.top = 240;
+    directional.shadow.camera.bottom = -240;
     this.scene.add(ambient, directional);
 
     const sky = new THREE.Mesh(
@@ -108,6 +111,10 @@ export class Game {
 
     this.addFieldMarkings();
     this.addStands();
+    const gridHelper = new THREE.GridHelper(220, 22, '#3a5d8a', '#1f324d');
+    gridHelper.rotation.x = Math.PI / 2;
+    gridHelper.position.y = 0.02;
+    this.scene.add(gridHelper);
   }
 
   addFieldMarkings() {
